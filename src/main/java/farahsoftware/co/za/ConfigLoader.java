@@ -1,100 +1,63 @@
 package farahsoftware.co.za;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.slf4j.Logger;
-import org.yaml.snakeyaml.Yaml;
 
-import java.io.*;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class ConfigLoader {
 
-    private final Logger logger;
-    private String host;
-    private int port;
-    private String database;
-    private String username;
-    private String password;
+    private static ConfigLoader instance;
+    private final PluginConfig config;
 
-    private boolean isFirstRun = false;
+    private ConfigLoader(Path dataDirectory, Logger logger) {
+        File dataFolder = dataDirectory.toFile();
+        File configFile = new File(dataFolder, "config.yml");
 
-    public ConfigLoader(Logger logger) {
-        this.logger = logger;
-        loadConfig();
-    }
+        if (!dataFolder.exists()) dataFolder.mkdirs();
 
-    private void loadConfig() {
-        try {
-            File pluginFolder = new File("plugins/ogmcdc");
-            if (!pluginFolder.exists()) {
-                if (pluginFolder.mkdirs()) {
-                    logger.info("Created plugin directory: " + pluginFolder.getPath());
+        if (!configFile.exists()) {
+            logger.warn("⚠ config.yml not found. Creating from internal resources...");
+            try (InputStream in = getClass().getClassLoader().getResourceAsStream("config.yml")) {
+                if (in == null) {
+                    throw new IOException("Default config.yml not found in resources!");
                 }
+                Files.copy(in, configFile.toPath());
+                logger.info("✅ Default config.yml created.");
+            } catch (IOException e) {
+                throw new RuntimeException("❌ Failed to create config.yml", e);
             }
-
-            File configFile = new File(pluginFolder, "config.yml");
-
-            if (!configFile.exists()) {
-                logger.warn("Config file not found. Creating default config.yml...");
-
-                createDefaultConfig(configFile);
-                isFirstRun = true;
-                logger.warn("Default config.yml created. Please edit the file with your database settings and restart the server.");
-                return;
-            }
-
-            InputStream input = new FileInputStream(configFile);
-            Yaml yaml = new Yaml();
-            Map<String, Object> data = yaml.load(input);
-
-            host = (String) data.getOrDefault("host", "localhost");
-            port = (int) data.getOrDefault("port", 3306);
-            database = (String) data.getOrDefault("database", "ogmcdc");
-            username = (String) data.getOrDefault("username", "user");
-            password = (String) data.getOrDefault("password", "pass");
-
-            logger.info("Configuration loaded from config.yml.");
-
-        } catch (Exception e) {
-            logger.error("Failed to load config.yml: " + e.getMessage(), e);
         }
-    }
 
-    private void createDefaultConfig(File configFile) {
-        try (FileWriter writer = new FileWriter(configFile)) {
-            writer.write("""
-                host: "localhost"
-                port: 3306
-                database: "ogmcdc"
-                username: "user"
-                password: "pass"
-                """);
+        try {
+            ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+            this.config = mapper.readValue(configFile, PluginConfig.class);
         } catch (IOException e) {
-            logger.error("Failed to create default config.yml: " + e.getMessage(), e);
+            throw new RuntimeException("❌ Failed to load config.yml", e);
         }
     }
 
-    public boolean isFirstRun() {
-        return isFirstRun;
+    public static void init(Path dataDirectory, Logger logger) {
+        if (instance == null) {
+            instance = new ConfigLoader(dataDirectory, logger);
+        }
     }
 
-    public String getHost() {
-        return host;
+    public static void reload(Path dataDirectory, Logger logger) {
+        instance = new ConfigLoader(dataDirectory, logger);
     }
 
-    public int getPort() {
-        return port;
+    public static ConfigLoader getInstance() {
+        if (instance == null) throw new IllegalStateException("Call ConfigLoader.init(...) before using getInstance()");
+        return instance;
     }
 
-    public String getDatabase() {
-        return database;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public String getPassword() {
-        return password;
+    public PluginConfig getConfig() {
+        return config;
     }
 }

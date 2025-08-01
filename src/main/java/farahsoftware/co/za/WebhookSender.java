@@ -1,49 +1,46 @@
 package farahsoftware.co.za;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-
+import javax.net.ssl.HttpsURLConnection;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 public class WebhookSender {
 
-    private static final String WEBHOOK_URL = "https://discord.com/api/webhooks/1400558062594691072/4kuG6W6pF4S2bmFIB87K895kCmtFO1sMyrmm_-7W5E0ZxDdBssz72htes5VHEO8LjqTP";
-
-    public static void sendRoleSync(String discordId, List<String> roleIds) {
+    public static void sendDiscordWebhook(String content) {
         try {
-            URL url = new URL(WEBHOOK_URL);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setDoOutput(true);
+            String webhookUrl = ConfigLoader.getInstance().getConfig().webhook.linkSync;
 
-            JsonObject payload = new JsonObject();
-            payload.addProperty("discordId", discordId);
-
-            JsonArray rolesArray = new JsonArray();
-            for (String roleId : roleIds) {
-                rolesArray.add(roleId);
+            if (webhookUrl == null || webhookUrl.isEmpty()) {
+                System.err.println("⚠ Webhook URL is missing in config.yml.");
+                return;
             }
-            payload.add("roles", rolesArray);
 
-            String json = payload.toString();
+            URL url = new URL(webhookUrl);
+            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json");
+
+            String jsonPayload = "{\"content\": " + quote(content) + "}";
 
             try (OutputStream os = connection.getOutputStream()) {
-                byte[] input = json.getBytes(StandardCharsets.UTF_8);
-                os.write(input);
+                byte[] input = jsonPayload.getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
             }
 
             int responseCode = connection.getResponseCode();
-            if (responseCode != 200 && responseCode != 204) {
-                System.out.println("Failed to send role sync webhook: " + responseCode);
+            if (responseCode != 204) {
+                System.err.println("⚠ Webhook failed: HTTP " + responseCode);
             }
 
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private static String quote(String text) {
+        return "\"" + text.replace("\"", "\\\"") + "\"";
     }
 }

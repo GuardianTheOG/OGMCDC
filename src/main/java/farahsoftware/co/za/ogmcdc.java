@@ -1,82 +1,114 @@
 package farahsoftware.co.za;
 
-import com.google.inject.Inject;
-import com.velocitypowered.api.command.CommandManager;
+import com.velocitypowered.api.event.EventManager;
+import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.plugin.PluginContainer;
+import com.velocitypowered.api.plugin.annotation.DataDirectory;
+import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
-import com.velocitypowered.api.plugin.Plugin;
-import com.velocitypowered.api.proxy.ProxyServer;
+
 import org.slf4j.Logger;
+
+import javax.inject.Inject;
+import java.nio.file.Path;
+import java.util.UUID;
 
 @Plugin(
         id = "ogmcdc",
         name = "OGMCDC",
-        version = "1.0.0",
-        description = "Guardian's Discord <-> Minecraft sync plugin",
-        url = "https://farahsoftware.co.za",
-        authors = {"Rizwan Vasavadvala"}
+        version = "1.0",
+        description = "Link Minecraft to Discord",
+        authors = {"FarahSoftware"}
 )
 public class ogmcdc {
 
     private final ProxyServer server;
     private final Logger logger;
+    private final Path dataDirectory;
+    private final PluginContainer pluginContainer;
+
     private DatabaseManager databaseManager;
-    private ConfigLoader config;
 
     @Inject
-    public ogmcdc(ProxyServer server, Logger logger) {
+    public ogmcdc(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory, PluginContainer pluginContainer) {
         this.server = server;
         this.logger = logger;
+        this.dataDirectory = dataDirectory;
+        this.pluginContainer = pluginContainer;
     }
 
-    @Subscribe
-    public void onProxyInitialization(ProxyInitializeEvent event) {
-        logger.info("OGMCDC plugin is initializing...");
-
-        // Load config
-        ConfigLoader configLoader = new ConfigLoader(logger);
-
-        if (configLoader.isFirstRun()) {
-            logger.warn("Plugin disabled: Please configure the database settings in config.yml and restart the server.");
-            return; // Don't continue plugin startup
-        }
-
-
-        // Initialize DatabaseManager
-        this.databaseManager = new DatabaseManager(
-                configLoader.getHost(),
-                configLoader.getPort(),
-                configLoader.getDatabase(),
-                configLoader.getUsername(),
-                configLoader.getPassword()
-        );
-
-        // Register command
-        CommandManager commandManager = server.getCommandManager();
-        commandManager.register("ogmcdc", new Command(databaseManager, this), "ogmcdc");
-
-        logger.info("OGMCDC plugin initialized successfully.");
+    @Inject
+    public void init(EventManager eventManager) {
+        ConfigLoader.init(dataDirectory, logger);
+        PluginConfig config = ConfigLoader.getInstance().getConfig();
+        this.databaseManager = new DatabaseManager();
+        eventManager.register(pluginContainer, new PlayerJoinListener(databaseManager, this, server.getScheduler()));
+        server.getCommandManager().register("ogmcdc", new Command(databaseManager, this));
     }
 
     public void reload() {
-        logger.info("Reloading OGMCDC plugin...");
+        ConfigLoader.reload(dataDirectory, logger);
+    }
 
-        // Reload config
-        this.config = new ConfigLoader(logger);
-        if (config.isFirstRun()) {
-            logger.warn("Config is incomplete. Plugin will not reconnect to the database.");
+    public void syncRolesForPlayer(UUID uuid) {
+        String userId = databaseManager.getDiscordId(uuid);
+        if (userId == null) {
+            logger.warn("No Discord ID found for player UUID: " + uuid);
             return;
         }
 
-        // Rebuild database connection
-        this.databaseManager = new DatabaseManager(
-                config.getHost(),
-                config.getPort(),
-                config.getDatabase(),
-                config.getUsername(),
-                config.getPassword()
-        );
+        PluginConfig config = ConfigLoader.getInstance().getConfig();
 
-        logger.info("Reload complete.");
+        try {
+            DiscordApiHelper.syncRoles(
+                    config.discord.token,
+                    config.discord.guildId,
+                    userId,
+                    databaseManager.getRoles(uuid),
+                    config.roles
+            );
+            logger.info("✅ Synced roles for UUID: " + uuid);
+        } catch (Exception e) {
+            logger.error("❌ Failed to sync roles for UUID: " + uuid + " - " + e.getMessage(), e);
+        }
     }
+
+    public ProxyServer getServer() {
+        return server;
+    }
+
+    public Logger getLogger() {
+        return logger;
+    }
+
+    public DatabaseManager getDatabaseManager() {
+        return databaseManager;
+    }
+    @Subscribe
+    public void onProxyInitialization(ProxyInitializeEvent event) {
+        logger.info("  /$$$$$$   /$$$$$$        /$$      /$$  /$$$$$$    /$$     /$$    /$$$$$$$   /$$$$$$ ");
+        logger.info(" /$$__  $$ /$$__  $$      | $$$    /$$$ /$$__  $$  /$$/    |  $$  | $$__  $$ /$$__  $$");
+        logger.info("| $$  \\ $$| $$  \\__/      | $$$$  /$$$$| $$  \\__/ /$$/      \\  $$ | $$  \\ $$| $$  \\__/");
+        logger.info("| $$  | $$| $$ /$$$$      | $$ $$/$$ $$| $$      /$$/ /$$$$$$\\  $$| $$  | $$| $$      ");
+        logger.info("| $$  | $$| $$|_  $$      | $$  $$$| $$| $$     |  $$|______/ /$$/| $$  | $$| $$      ");
+        logger.info("| $$  | $$| $$  \\ $$      | $$\\  $ | $$| $$    $$\\  $$       /$$/ | $$  | $$| $$    $$");
+        logger.info("|  $$$$$$/|  $$$$$$/      | $$ \\/  | $$|  $$$$$$/ \\  $$     /$$/  | $$$$$$$/|  $$$$$$/");
+        logger.info(" \\______/  \\______/       |__/     |__/ \\______/   \\__/    |__/   |_______/  \\______/ ");
+        logger.info("                                                                                      ");
+        logger.info("                                                                                      ");
+        logger.info("        /$$$$$$   /$$                           /$$                     /$$           ");
+        logger.info("       /$$__  $$ | $$                          | $$                    | $$           ");
+        logger.info("      | $$  \\__//$$$$$$    /$$$$$$   /$$$$$$  /$$$$$$    /$$$$$$   /$$$$$$$           ");
+        logger.info("      |  $$$$$$|_  $$_/   |____  $$ /$$__  $$|_  $$_/   /$$__  $$ /$$__  $$           ");
+        logger.info("       \\____  $$ | $$      /$$$$$$$| $$  \\__/  | $$    | $$$$$$$$| $$  | $$           ");
+        logger.info("       /$$  \\ $$ | $$ /$$ /$$__  $$| $$        | $$ /$$| $$_____/| $$  | $$           ");
+        logger.info("      |  $$$$$$/ |  $$$$/|  $$$$$$$| $$        |  $$$$/|  $$$$$$$|  $$$$$$$           ");
+        logger.info("       \\______/   \\___/   \\_______/|__/         \\___/   \\_______/ \\_______/           ");
+        logger.info("");
+        logger.info("✅ OGMCDC plugin has started!");
+
+    }
+
+
 }

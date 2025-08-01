@@ -1,45 +1,65 @@
 package farahsoftware.co.za;
 
 import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.connection.PostLoginEvent;
+import com.velocitypowered.api.event.player.ServerPostConnectEvent;
 import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.scheduler.Scheduler;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
 
-import java.util.List;
-import java.util.Optional;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 public class PlayerJoinListener {
 
-    private final DatabaseManager db;
+    private final DatabaseManager database;
+    private final ogmcdc plugin;
+    private final Scheduler scheduler;
 
-    public PlayerJoinListener(DatabaseManager db) {
-        this.db = db;
+    public PlayerJoinListener(DatabaseManager database, ogmcdc plugin, Scheduler scheduler) {
+        this.database = database;
+        this.plugin = plugin;
+        this.scheduler = scheduler;
     }
 
     @Subscribe
-    public void onPlayerJoin(PostLoginEvent event) {
+    public void onServerPostConnect(ServerPostConnectEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-        Optional<String> discordIdOpt = db.getDiscordId(uuid);
+        PluginConfig config = ConfigLoader.getInstance().getConfig();
 
-        if (discordIdOpt.isPresent()) {
-            // Player is linked — sync roles
-            String discordId = discordIdOpt.get();
-            String rank = db.getPlayerRank(uuid); // Stub — replace with real rank fetch
-            List<String> staffRoles = db.getStaffRoles(uuid); // Stub — same here
-            List<String> discordRoles = RoleMapper.getDiscordRoles(rank, staffRoles);
+        scheduler.buildTask(plugin, () -> {
+            if (database.isPlayerLinked(uuid)) {
+                // Get Discord username
+                String discordUsername = database.getDiscordUsername(uuid);
+                String linkedMsg = config.linkedMessage.linked + " (" + discordUsername + ")";
+                player.sendMessage(Component.text(linkedMsg, NamedTextColor.YELLOW));
 
-            WebhookSender.sendRoleSync(discordId, discordRoles);
-        } else {
-            // Not linked — generate code and send link
-            String code = db.generateAndStoreVerificationCode(uuid);
+                plugin.syncRolesForPlayer(uuid);
+            } else {
+                String code = database.generateAndStoreVerificationCode(uuid);
 
-            Component message = Component.text("Click here to link your Discord account.")
-                    .clickEvent(ClickEvent.openUrl("https://farahsoftware.co.za/mrg?code=" + code));
+                String encodedRedirect = URLEncoder.encode(config.discord.redirectUrl, StandardCharsets.UTF_8);
+                String oauthUrl = config.linkMessage.linkUrl +
+                        "?client_id=" + config.discord.clientId +
+                        "&response_type=code" +
+                        "&redirect_uri=" + encodedRedirect +
+                        "&scope=identify+guilds.members.read+guilds" +
+                        "&state=" + code;
 
-            player.sendMessage(message);
-        }
+                Component message = Component.text(config.linkMessage.prefix, NamedTextColor.YELLOW)
+                        .append(Component.text(config.linkMessage.linkText)
+                                .color(NamedTextColor.GREEN)
+                                .clickEvent(ClickEvent.openUrl(oauthUrl))
+                                .hoverEvent(HoverEvent.showText(Component.text(config.linkMessage.hoverText))))
+                        .append(Component.text(config.linkMessage.suffix, NamedTextColor.YELLOW));
+
+                player.sendMessage(message);
+            }
+        }).delay(5, TimeUnit.SECONDS).schedule();
     }
 }
