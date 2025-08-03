@@ -1,25 +1,35 @@
 package farahsoftware.co.za;
 
+import com.google.common.util.concurrent.ServiceManager;
 import com.velocitypowered.api.event.EventManager;
+import com.velocitypowered.api.plugin.Dependency;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.PluginContainer;
+import com.velocitypowered.api.plugin.PluginManager;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
-
+import net.luckperms.api.LuckPerms;
+import net.luckperms.api.LuckPermsProvider;
+import net.luckperms.api.event.LuckPermsEvent;
 import org.slf4j.Logger;
 
 import javax.inject.Inject;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Plugin(
         id = "ogmcdc",
         name = "OGMCDC",
         version = "1.0",
         description = "Link Minecraft to Discord",
-        authors = {"FarahSoftware"}
+        authors = {"GuardianTheOG"},
+        dependencies  = {
+                @Dependency(id = "luckperms", optional = false)
+        }
 )
 public class ogmcdc {
 
@@ -27,6 +37,7 @@ public class ogmcdc {
     private final Logger logger;
     private final Path dataDirectory;
     private final PluginContainer pluginContainer;
+    private static LuckPerms api;
 
     private DatabaseManager databaseManager;
 
@@ -36,57 +47,18 @@ public class ogmcdc {
         this.logger = logger;
         this.dataDirectory = dataDirectory;
         this.pluginContainer = pluginContainer;
+
     }
 
-    @Inject
-    public void init(EventManager eventManager) {
-        ConfigLoader.init(dataDirectory, logger);
-        PluginConfig config = ConfigLoader.getInstance().getConfig();
-        this.databaseManager = new DatabaseManager();
-        eventManager.register(pluginContainer, new PlayerJoinListener(databaseManager, this, server.getScheduler()));
-        server.getCommandManager().register("ogmcdc", new Command(databaseManager, this));
-    }
-
-    public void reload() {
-        ConfigLoader.reload(dataDirectory, logger);
-    }
-
-    public void syncRolesForPlayer(UUID uuid) {
-        String userId = databaseManager.getDiscordId(uuid);
-        if (userId == null) {
-            logger.warn("No Discord ID found for player UUID: " + uuid);
-            return;
-        }
-
-        PluginConfig config = ConfigLoader.getInstance().getConfig();
-
-        try {
-            DiscordApiHelper.syncRoles(
-                    config.discord.token,
-                    config.discord.guildId,
-                    userId,
-                    databaseManager.getRoles(uuid),
-                    config.roles
-            );
-            logger.info("✅ Synced roles for UUID: " + uuid);
-        } catch (Exception e) {
-            logger.error("❌ Failed to sync roles for UUID: " + uuid + " - " + e.getMessage(), e);
-        }
-    }
-
-    public ProxyServer getServer() {
-        return server;
-    }
-
-    public Logger getLogger() {
-        return logger;
-    }
-
-    public DatabaseManager getDatabaseManager() {
-        return databaseManager;
-    }
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
+        this.api = LuckPermsProvider.get();
+        startArt();
+        initAll();
+    }
+
+    public void startArt() {
+        logger.info("✅ LuckPerms started and hooked.");
         logger.info("  /$$$$$$   /$$$$$$        /$$      /$$  /$$$$$$    /$$     /$$    /$$$$$$$   /$$$$$$ ");
         logger.info(" /$$__  $$ /$$__  $$      | $$$    /$$$ /$$__  $$  /$$/    |  $$  | $$__  $$ /$$__  $$");
         logger.info("| $$  \\ $$| $$  \\__/      | $$$$  /$$$$| $$  \\__/ /$$/      \\  $$ | $$  \\ $$| $$  \\__/");
@@ -107,8 +79,41 @@ public class ogmcdc {
         logger.info("       \\______/   \\___/   \\_______/|__/         \\___/   \\_______/ \\_______/           ");
         logger.info("");
         logger.info("✅ OGMCDC plugin has started!");
-
     }
 
+    public void initAll() {
+        ConfigLoader.init(dataDirectory, logger);
+        PluginConfig config = ConfigLoader.getInstance().getConfig();
+        this.databaseManager = new DatabaseManager();
+        server.getEventManager().register(pluginContainer, new PlayerJoinListener(databaseManager, this, server.getScheduler()));
+        server.getCommandManager().register("ogmcdc", new Command(databaseManager, this, server));
+    }
+
+    public void reload() {
+        ConfigLoader.reload(dataDirectory, logger);
+    }
+
+    public void syncRolesForPlayer(UUID uuid) {
+        String userId = databaseManager.getDiscordId(uuid);
+        if (userId == null) {
+            logger.warn("No Discord ID found for player UUID: " + uuid);
+            return;
+        }
+
+        PluginConfig config = ConfigLoader.getInstance().getConfig();
+
+        try {
+            DiscordApiHelper.syncRolesToDiscord(
+                    config.discord.token,
+                    config.discord.guildId,
+                    userId,
+                    databaseManager.getRoles(uuid),
+                    config.roles
+            );
+            logger.info("✅ Synced roles for UUID: " + uuid);
+        } catch (Exception e) {
+            logger.error("❌ Failed to sync roles for UUID: " + uuid + " - " + e.getMessage(), e);
+        }
+    }
 
 }

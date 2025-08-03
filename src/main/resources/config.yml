@@ -1,39 +1,38 @@
 discord:
-  token: "Bot Token"
-  guildId: "Discord Server ID"
+  token: "BotToken"
+  guildId: "DiscordServerID"
+  clientId: "DiscordAppClientID"
+  clientSecret: "DiscordAppSecret"
+  redirectUrl: "DiscordAppRedirectURL"
 
 linkCode:
-  expiryInMinutes: 5 #Default Value
-  codeLength: 6 #Default Value
+  expiryInMinutes: 5
+  codeLength: 6
 
 roles:
+  owner: "0000000000000000000"
   default: "0000000000000000000"
-  Role1: "0000000000000000000"
-  Role2: "0000000000000000000"
-  Role3: "0000000000000000000"
-  Role4: "0000000000000000000"
-  Role5: "0000000000000000000"
-  Role6: "0000000000000000000"
-  Role7: "0000000000000000000"
-  Role8: "0000000000000000000"
-  Role9: "0000000000000000000"
 
 linkMessage:
   prefix: "✉ Click "
   linkText: " [HERE] "
-  linkUrl: "Your Discord Bot OAuth URL here"
-  hoverText: "Click the link to link your MC Account to Discord."
+  linkUrl: "https://discord.com/oauth2/authorize"
+  hoverText: "Linking your account gives you the first Rank for free."
   suffix: " to link your Discord account."
+
+reward:
+  linkreward: "false"
+  linkrank: "default"
 
 linkedMessage:
   linked: "✅ Your account is already linked to Discord."
 
 webhook:
-  linkSync: "Your Webhook URL"
+  linkSync: "DiscordAppURI"
 
 mysql:
   host: "localhost"
   port: 3306
-  database: "ogmcdc"
+  database: "database"
   username: "username"
-  password: "password"
+  password: "Password"

@@ -2,15 +2,27 @@ package farahsoftware.co.za;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import net.luckperms.api.LuckPerms;
+import net.luckperms.api.LuckPermsProvider;
+import net.luckperms.api.model.user.User;
 
 import java.sql.*;
 import java.util.*;
 
+import net.luckperms.api.node.Node;
+import net.luckperms.api.node.types.InheritanceNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DatabaseManager {
 
     private final HikariDataSource dataSource;
+    private final LuckPerms luckPerms;
+    private final Logger logger;
 
     public DatabaseManager() {
+        luckPerms = LuckPermsProvider.get();
+        logger = LoggerFactory.getLogger("logger");
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
         } catch (ClassNotFoundException e) {
@@ -39,6 +51,7 @@ public class DatabaseManager {
                 CREATE TABLE IF NOT EXISTS linked_accounts (
                     uuid VARCHAR(36) PRIMARY KEY,
                     discord_id VARCHAR(32) NOT NULL,
+                    discord_username VARCHAR(100),
                     linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """);
@@ -50,6 +63,15 @@ public class DatabaseManager {
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """);
+
+            stmt.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS user_roles (
+                    uuid VARCHAR(36),
+                    role VARCHAR(64),
+                    PRIMARY KEY (uuid, role)
+                )
+            """);
+
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -57,7 +79,7 @@ public class DatabaseManager {
 
     public boolean isPlayerLinked(UUID uuid) {
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("SELECT discord_id FROM discord_links WHERE uuid = ?")) {
+             PreparedStatement stmt = conn.prepareStatement("SELECT discord_id FROM linked_accounts WHERE uuid = ?")) {
             stmt.setString(1, uuid.toString());
             try (ResultSet rs = stmt.executeQuery()) {
                 return rs.next();
@@ -100,24 +122,9 @@ public class DatabaseManager {
         return Optional.empty();
     }
 
-    public Optional<String> getLinkedDiscordId(UUID uuid) {
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("SELECT discord_id FROM discord_links WHERE uuid = ?")) {
-            stmt.setString(1, uuid.toString());
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return Optional.of(rs.getString("discord_id"));
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return Optional.empty();
-    }
-
     public void unlinkPlayer(UUID uuid) {
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("DELETE FROM discord_links WHERE uuid = ?")) {
+             PreparedStatement stmt = conn.prepareStatement("DELETE FROM linked_accounts WHERE uuid = ?")) {
             stmt.setString(1, uuid.toString());
             stmt.executeUpdate();
         } catch (SQLException e) {
@@ -186,18 +193,43 @@ public class DatabaseManager {
         return null;
     }
     public List<String> getRoles(UUID uuid) {
-        List<String> roles = new ArrayList<>();
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("SELECT role FROM user_roles WHERE uuid = ?")) {
-            stmt.setString(1, uuid.toString());
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                roles.add(rs.getString("role"));
+        User user = luckPerms.getUserManager().getUser(uuid);
+        if (user == null) {
+            user = luckPerms.getUserManager().loadUser(uuid).join();
+            if (user == null) {
+                logger.warn("LuckPerms user not found for UUID: " + uuid);
+                return Collections.emptyList();
             }
-        } catch (SQLException e) {
+        }
+        return user.getNodes().stream().filter(node -> node instanceof InheritanceNode).map(node -> ((InheritanceNode) node).getGroupName()).toList();
+    }
+
+    //public List<String> getRoles(UUID uuid) {
+    //    List<String> roles = new ArrayList<>();
+    //    try (Connection conn = dataSource.getConnection();
+    //         PreparedStatement stmt = conn.prepareStatement("SELECT role FROM user_roles WHERE uuid = ?")) {
+    //        stmt.setString(1, uuid.toString());
+    //        ResultSet rs = stmt.executeQuery();
+    //        while (rs.next()) {
+    //            roles.add(rs.getString("role"));
+    //        }
+    //    } catch (SQLException e) {
+    //        e.printStackTrace();
+    //    }
+    //    return roles;
+    //}
+
+    public void storeUserRole(UUID uuid, String role) {
+        String query = "INSERT INTO user_roles (uuid, role) VALUES (?, ?) ON DUPLICATE KEY UPDATE role = ?";
+        try(Connection conn = dataSource.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, uuid.toString());
+            stmt.setString(2, role);
+            stmt.setString(3, role);
+            stmt.execute();
+        }catch (SQLException e) {
             e.printStackTrace();
         }
-        return roles;
     }
 
 

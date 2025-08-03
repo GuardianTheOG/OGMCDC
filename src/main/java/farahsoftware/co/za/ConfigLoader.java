@@ -37,6 +37,7 @@ public class ConfigLoader {
         try {
             ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
             this.config = mapper.readValue(configFile, PluginConfig.class);
+            this.config.initialize(); //
         } catch (IOException e) {
             throw new RuntimeException("❌ Failed to load config.yml", e);
         }
@@ -53,7 +54,8 @@ public class ConfigLoader {
     }
 
     public static ConfigLoader getInstance() {
-        if (instance == null) throw new IllegalStateException("Call ConfigLoader.init(...) before using getInstance()");
+        if (instance == null)
+            throw new IllegalStateException("Call ConfigLoader.init(...) before using getInstance()");
         return instance;
     }
 

@@ -30,6 +30,7 @@ dependencies {
     implementation 'org.yaml:snakeyaml:2.2'
     implementation 'com.zaxxer:HikariCP:5.1.0'
     implementation 'com.mysql:mysql-connector-j:9.4.0'
+    compileOnly 'net.luckperms:api:5.4'
 }
 
 tasks.withType(JavaCompile).configureEach {

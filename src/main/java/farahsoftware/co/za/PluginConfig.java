@@ -1,6 +1,9 @@
 package farahsoftware.co.za;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 public class PluginConfig {
@@ -12,6 +15,33 @@ public class PluginConfig {
     public LinkedMessage linkedMessage;
     public Webhook webhook;
     public MySQL mysql;
+    public Reward reward;
+
+    private transient Map<String, String> roleToRank;
+    private transient Map<String, String> rankToRole;
+
+    public void initialize() {
+        if (roles != null) {
+            Map<String, String> roleToRankTmp = new HashMap<>();
+            Map<String, String> rankToRoleTmp = new HashMap<>();
+            for (Map.Entry<String, String> entry : roles.entrySet()) {
+                String rank = entry.getKey();        // e.g., "mod"
+                String roleId = entry.getValue();    // e.g., "1268..."
+                rankToRoleTmp.put(rank, roleId);
+                roleToRankTmp.put(roleId, rank);
+            }
+            this.rankToRole = Collections.unmodifiableMap(rankToRoleTmp);
+            this.roleToRank = Collections.unmodifiableMap(roleToRankTmp);
+        }
+    }
+
+    public Map<String, String> getRoleToRank() {
+        return roleToRank != null ? roleToRank : Collections.emptyMap();
+    }
+
+    public Map<String, String> getRankToRole() {
+        return rankToRole != null ? rankToRole : Collections.emptyMap();
+    }
 
     public static class Discord {
         public String token;
@@ -49,5 +79,9 @@ public class PluginConfig {
         public String database;
         public String username;
         public String password;
+    }
+    public static class Reward {
+        public boolean linkreward;
+        public String linkrank;
     }
 }
