@@ -83,5 +83,6 @@ public class PluginConfig {
     public static class Reward {
         public boolean linkreward;
         public String linkrank;
+        public String linktrack;
     }
 }

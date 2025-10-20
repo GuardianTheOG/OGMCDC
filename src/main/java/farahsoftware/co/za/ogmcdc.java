@@ -116,4 +116,8 @@ public class ogmcdc {
         }
     }
 
+    public ProxyServer getProxy() {
+        return server;
+    }
+
 }

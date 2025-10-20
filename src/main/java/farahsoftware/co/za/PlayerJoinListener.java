@@ -14,12 +14,14 @@ import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.user.User;
 import net.luckperms.api.node.Node;
 import farahsoftware.co.za.Command;
+import net.luckperms.api.node.types.InheritanceNode;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.List;
+import java.util.logging.Logger;
 
 public class PlayerJoinListener {
 
@@ -54,16 +56,27 @@ public class PlayerJoinListener {
                 player.sendMessage(Component.text(linkedMsg, NamedTextColor.YELLOW));
                 plugin.syncRolesForPlayer(uuid);
                 database.storeUserRole(uuid, rank);
-                if (discordId != null) {
+
+                if (discordId != null && config.reward.linkreward) {
                     List<String> roles = database.getRoles(uuid);
-                    if (roles.isEmpty() && config.reward.linkreward) {
+                    if (roles.isEmpty()) {
                         String rewardRank = config.reward.linkrank;
+
                         if (luckPerms != null) {
                             luckPerms.getUserManager().loadUser(uuid).thenAcceptAsync(user1 -> {
-                                user.data().add(luckPerms.getNodeBuilderRegistry().forInheritance().group(rewardRank).build());
-                                luckPerms.getUserManager().saveUser(user);
-                                database.storeUserRole(uuid, rewardRank);
-                                plugin.syncRolesForPlayer(uuid);
+                                String currentRank = user1.getPrimaryGroup();
+                                if (currentRank.equalsIgnoreCase("default")) {
+                                    // Give reward rank
+                                    String trackName = config.reward.linktrack;
+                                    String lpCmd = "lpv user " + user1.getUsername() + " parent set " + rewardRank;
+                                    plugin.getProxy().getCommandManager().executeAsync(plugin.getProxy().getConsoleCommandSource(), lpCmd).thenAccept(result -> {
+                                        luckPerms.getUserManager().saveUser(user1);
+                                        database.storeUserRole(uuid, rewardRank);
+                                        plugin.syncRolesForPlayer(uuid);
+                                        Logger.getGlobal().info("[OGMCDC] Successfully gave " + user1.getUsername() + " " + rewardRank);
+                                    });
+
+                                }
                             });
                         }
                     }

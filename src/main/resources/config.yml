@@ -23,6 +23,7 @@ linkMessage:
 reward:
   linkreward: "false"
   linkrank: "default"
+  linktrack: "rank"
 
 linkedMessage:
   linked: "✅ Your account is already linked to Discord."
